@@ -18,94 +18,72 @@ extern crate stellaris_launchpad;
 
 use core::fmt::Write;
 use embedded_hal::serial::Read;
-use stellaris_launchpad::cpu::{gpio, systick, timer, uart};
+use stellaris_launchpad::cpu::{gpio, timer, uart};
 
-// ****************************************************************************
-//
-// Public Types
-//
-// ****************************************************************************
-
-// None
-
-// ****************************************************************************
-//
-// Private Types
-//
-// ****************************************************************************
-
-// None
-
-// ****************************************************************************
-//
-// Public Data
-//
-// ****************************************************************************
-
-// None
-
-// ****************************************************************************
-//
-// Public Functions
-//
-// ****************************************************************************
-
-enum Color {
-    Red,
-    Green,
-    Blue,
-}
-
-trait LightState {
-    fn rgb(&self) -> (u32, u32, u32);
-}
-
-struct Red;
-struct Green;
-struct Blue;
-
-impl LightState for Red {
-    fn rgb(&self) -> (u32, u32, u32) {
-        (255, 0, 0)
+mod lights {
+    pub trait LightState {
+        fn rgb(&self) -> (u32, u32, u32);
     }
-}
 
-impl LightState for Green {
-    fn rgb(&self) -> (u32, u32, u32) {
-        (0, 255, 0)
+    pub struct Red;
+    pub struct Green;
+    pub struct Blue;
+
+    impl LightState for Red {
+        fn rgb(&self) -> (u32, u32, u32) {
+            (255, 0, 0)
+        }
     }
-}
 
-impl LightState for Blue {
-    fn rgb(&self) -> (u32, u32, u32) {
-        (0, 0, 255)
-    } 
-}
-
-struct Blinklight<T: LightState> {
-    state: T
-}
-
-impl From<Blinklight<Red>> for Blinklight<Green> {
-    fn from(state: Blinklight<Red>) -> Blinklight<Green> {
-        Blinklight { state: Green }
+    impl LightState for Green {
+        fn rgb(&self) -> (u32, u32, u32) {
+            (0, 255, 0)
+        }
     }
-}
 
-impl From<Blinklight<Green>> for Blinklight<Blue> {
-    fn from(state: Blinklight<Green>) -> Blinklight<Blue> {
-        Blinklight { state: Blue }
+    impl LightState for Blue {
+        fn rgb(&self) -> (u32, u32, u32) {
+            (0, 0, 255)
+        }
     }
-}
 
-impl From<Blinklight<Blue>> for Blinklight<Red> {
-    fn from(state: Blinklight<Blue>) -> Blinklight<Red> {
+    pub struct Blinklight<T: LightState> {
+        state: T
+    }
+
+    impl<T: LightState> Blinklight<T> {
+        pub fn rgb(&self) -> (u32, u32, u32) {
+            self.state.rgb()
+        }
+    }
+
+    impl From<Blinklight<Red>> for Blinklight<Green> {
+        fn from(_: Blinklight<Red>) -> Blinklight<Green> {
+            Blinklight { state: Green }
+        }
+    }
+
+    impl From<Blinklight<Green>> for Blinklight<Blue> {
+        fn from(_: Blinklight<Green>) -> Blinklight<Blue> {
+            Blinklight { state: Blue }
+        }
+    }
+
+    impl From<Blinklight<Blue>> for Blinklight<Red> {
+        fn from(_: Blinklight<Blue>) -> Blinklight<Red> {
+            Blinklight { state: Red }
+        }
+    }
+
+    pub fn start() -> Blinklight<Red> {
         Blinklight { state: Red }
     }
 }
 
 #[no_mangle]
 pub extern "C" fn main() {
+    use lights::*;
+
     let mut uart = uart::Uart::new(uart::UartId::Uart0, 115200, uart::NewlineMode::SwapLFtoCRLF);
 
     let mut tr = timer::Timer::new(timer::TimerId::Timer0B);
@@ -123,9 +101,9 @@ pub extern "C" fn main() {
     gpio::PinPort::PortF(gpio::Pin::Pin3).enable_ccp();
 
     loop {
-        let mut light = Blinklight { state: Red };
+        let light = lights::start();
 
-        let (red, green, blue) = light.state.rgb();
+        let (red, green, blue) = light.rgb();
         
         tr.set_pwm(red);
         tb.set_pwm(green);
@@ -135,7 +113,7 @@ pub extern "C" fn main() {
 
         let green_light: Blinklight<Green> = light.into();
 
-        let (red, green, blue) = green_light.state.rgb();
+        let (red, green, blue) = green_light.rgb();
 
         tr.set_pwm(red);
         tb.set_pwm(green);
@@ -145,7 +123,7 @@ pub extern "C" fn main() {
 
         let blue_light: Blinklight<Blue> = green_light.into();
 
-        let (red, green, blue) = blue_light.state.rgb();
+        let (red, green, blue) = blue_light.rgb();
 
         tr.set_pwm(red);
         tb.set_pwm(green);
